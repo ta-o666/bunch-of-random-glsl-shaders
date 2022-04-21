@@ -26,54 +26,44 @@ float squashCircle(vec2 center, vec2 fragCoord, float radius, float squashFactor
     }
 }
 
-vec4 drawCircleTrail(vec2 center, vec2 fragCoord, float radius, float squashFactor, 
-vec4 bgColor, vec4 color, float shadeSize, float shadeWeight, bool shadowMode, 
-float shadowWeight)
+vec4 drawCircleTrail(vec2 center, vec2 fragCoord, float radius, float distFromCenter, 
+float squashFactor, vec4 bgColor, vec4 fadeColor, vec4 color, float shadeSize, 
+bool shadowMode, float shadowWeight)
 {
-    float xCir = center.x - fragCoord.x;
-    float yCir = center.y - fragCoord.y;
-    float distFromCenter = sqrt((xCir * xCir) + (yCir * yCir));
-
-    float x = fragCoord.x;
-    float y = fragCoord.y;
-    bool shouldRender = false;
+    vec2 parallelPoint = fragCoord;
     float newRadius;
     
-    for (float f = 0.0; f < (shadeSize); ++f)
+    for (float f = 0.0; f < shadeSize * 0.35; f++)
     {   
-        x -= 1.0;
-        y += 1.0;
+        parallelPoint.x -= 1.0 / 0.35;
+        parallelPoint.y += 1.0 / 0.35;
+        
+        newRadius = squashCircle(center, parallelPoint, radius, squashFactor);
 
-        newRadius = squashCircle(center, vec2(x, y), radius, squashFactor);
-
-        if (length(center - vec2(x, y)) <= newRadius)
+        if (length(center - parallelPoint) <= newRadius)
         {
-            shouldRender = true;
             break;
         }
     }
 
-    vec2 parallelPoint = vec2(x, y);
-    float x1 = parallelPoint.x - fragCoord.x;
-    float y1 = parallelPoint.y - fragCoord.y;
-    float distFromParallelPoint = sqrt((x1 * x1) + (y1 * y1));
+    float distFromParallelPoint = length(parallelPoint - fragCoord);
 
-    if (shouldRender && distFromParallelPoint <= shadeSize)
+    if (distFromParallelPoint <= shadeSize)
     {
-        float shadeValue = shadeWeight * ((shadeSize - distFromParallelPoint) / shadeSize);
+        float shadeValue = smoothstep(1.0, 0.0,distFromParallelPoint / shadeSize);
 
         vec4 trailColor = vec4(
-        mixColor(bgColor.x, color.x, shadeValue),
-        mixColor(bgColor.y, color.y, shadeValue),
-        mixColor(bgColor.z, color.z, shadeValue),
+        mixColor(fadeColor.x, color.x, shadeValue),
+        mixColor(fadeColor.y, color.y, shadeValue),
+        mixColor(fadeColor.z, color.z, shadeValue),
         1.0);
 
         if (shadowMode)
         {
             trailColor = vec4(
-            mixColor(bgColor.x, trailColor.x - shadowWeight, shadeValue),
-            mixColor(bgColor.y, trailColor.y - shadowWeight, shadeValue),
-            mixColor(bgColor.z, trailColor.z - shadowWeight, shadeValue),
+            mixColor(fadeColor.x, trailColor.x - shadowWeight, shadeValue),
+            mixColor(fadeColor.y, trailColor.y - shadowWeight, shadeValue),
+            mixColor(fadeColor.z, trailColor.z - shadowWeight, shadeValue),
             1.0);
         }
 
@@ -85,18 +75,16 @@ float shadowWeight)
     }
 }
 
-vec4 drawCircle(vec2 center, vec2 fragCoord, float radius, float squashFactor, 
-vec4 bgColor, vec4 color, float shadeSize, float shadeWeight)
+vec4 drawCircle(vec2 center, vec2 fragCoord, float radius, vec2 distCenterVec, 
+float distFromCenter, float squashFactor, vec4 bgColor, vec4 color, float shadeSize, 
+float shadeWeight)
 {
-    float x = fragCoord.x - center.x;
-    float y = fragCoord.y - center.y;
-    float dist = sqrt((x * x) + (y * y));
     float newRadius = squashCircle(center, fragCoord, radius, squashFactor);
     
-    if (dist <= newRadius)
+    if (distFromCenter <= newRadius)
     {
-        float angleFromBottomRight = acos(clamp(dot(vec2(x, y), vec2(-1, 1)) / 
-        (dist * sqrt(2.0)), -1.0, 1.0));
+        float angleFromBottomRight = acos(clamp(dot(distCenterVec, vec2(-1, 1)) / 
+        (distFromCenter * sqrt(2.0)), -1.0, 1.0));
         float angleShadeFactor = 1.0;
         
         if (angleFromBottomRight < PI / 2.0)
@@ -104,8 +92,9 @@ vec4 bgColor, vec4 color, float shadeSize, float shadeWeight)
             angleShadeFactor = 2.0 * (angleFromBottomRight / PI);
         }
     
-        float shadeValue = shadeWeight * (shadeSize / (shadeSize + newRadius - dist));
-        
+        float shadeValue = shadeWeight * (shadeSize / 
+        (shadeSize + newRadius - distFromCenter));
+
         shadeValue = mixColor(shadeWeight * (shadeSize / (shadeSize + newRadius))
         , shadeValue, angleShadeFactor);
         
@@ -121,23 +110,31 @@ vec4 bgColor, vec4 color, float shadeSize, float shadeWeight)
     }
 }
 
-void mainImage( out vec4 fragColor, in vec2 fragCoord )
+void mainImage(out vec4 fragColor, in vec2 fragCoord)
 {
     vec2 uv = fragCoord/iResolution.xy;
 
     vec4 col = vec4(0.5 + 0.5*cos(iTime * 0.9 + uv.xyx + vec3(0,2,4)), 1.0);
     
     vec4 circleCol = vec4(0.9 + 0.5*sin(iTime * 0.9 + uv.xyx + vec3(0,2,4)), 1.0);
-    
-    vec2 center = vec2(iResolution.x / 2.0, iResolution / 3.0);
+    vec2 center;
+    vec4 outputColor = col;
+    float maxRadius = iResolution.x * (100.0 / 768.0);
 
-    vec4 outputColor;
+    for (float j = 0.5; j < 5.0; j++)
+    {
+        center = vec2((iResolution.x / 5.0) * j, iResolution.y / 2.0);
+        float x = fragCoord.x - center.x;
+        float y = fragCoord.y - center.y;
+        float distFromCenter = sqrt((x * x) + (y * y));
     
-    outputColor = drawCircleTrail(center, fragCoord, 100.0, 50.0, col, circleCol,
-    300.0, 1.0, true, 0.7);
+        outputColor = drawCircleTrail(center, fragCoord, maxRadius, distFromCenter, 
+        maxRadius / 2.0, outputColor, col, circleCol, iResolution.x * (150.0 / 768.0), 
+        true, 0.5);
     
-    outputColor = drawCircle(center, fragCoord, 100.0, 50.0, outputColor, circleCol,
-    25.0, 0.7);
+        outputColor = drawCircle(center, fragCoord, maxRadius, vec2(x, y), 
+        distFromCenter, maxRadius / 2.0, outputColor, circleCol, maxRadius * 0.4, 0.5);   
+    }
 
     fragColor = outputColor;
 }
