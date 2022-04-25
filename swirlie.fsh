@@ -5,7 +5,7 @@ const float vignetteWeight = 0.1;
 
 //lightbursts only work if hueCycleMode is false
 const bool lightBursts = true;
-const float lightBurstDura = 2.0;
+const float lightBurstDura = 3.5;
 //range: [0.0, 3.0]
 const float lightBurstFactor = 2.0;
 
@@ -14,7 +14,7 @@ const float contrast = 0.8;
 //range: [1.0, 1000.0]
 const float swirlFactor = 2.0;
 
-const bool hueCycleMode = true;
+const bool hueCycleMode = false;
 const bool huePearlescent = true;
 const float huePearlescentRainbowSpeed = 0.2;
 //range: [-1.0, 1.0]
@@ -135,6 +135,12 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
             float colorVal = mix(huePearlescentBright, huePearlescentValleyBright
             , pattern(uv * scale));
             
+            if (lightBursts && pattern(uv * scale) > 0.25 * cos(iTime * 2.0 * PI / lightBurstDura) + 0.5)
+            {
+                colorSat = mix(colorSat, -lightBurstFactor, (pattern(uv * scale) - 
+                (0.25 * cos(iTime * 2.0 * PI / lightBurstDura) + 0.5)) / (0.25 * cos(iTime * 2.0) + 0.5));
+            }
+            
             vec3 color = hsv2rgb(vec3(colorInitHue + pattern(uv * scale) * 
             huePearlescentLayers, colorSat, colorVal));
             
@@ -150,6 +156,12 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
            
             float colorVal = mix(rgb2hsv(color1).z, rgb2hsv(color2).z, pattern(uv * 
             scale));
+            
+            if (lightBursts && pattern(uv * scale) > 0.25 * cos(iTime * 2.0 * PI / lightBurstDura) + 0.5)
+            {
+                colorSat = mix(colorSat, -lightBurstFactor, (pattern(uv * scale) - 
+                (0.25 * cos(iTime * 2.0 * PI / lightBurstDura) + 0.5)) / (0.25 * cos(iTime * 2.0) + 0.5));
+            }
             
             fragColor = vec4(hsv2rgb(vec3(colorHue, colorSat, colorVal)), 1.0);
         }
